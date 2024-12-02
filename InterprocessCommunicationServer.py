@@ -1,4 +1,14 @@
 import socket
+from pymongo import MongoClient
+from datetime import datetime, timedelta
+
+#connection to mongo
+def connect_mongo():
+    #fill in with mine mongo database
+    client = MongoClient()
+    db = client[]
+    return db
+
 print("server control")
 myTCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
