@@ -15,8 +15,8 @@ VALID_QUERIES = [
 #connection to mongo
 def connect_mongo():
     #fill in with my mongo database
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['Cluster0']
+    client = MongoClient('mongodb+srv://choharry888:j741z2FEdn05nnCA@cluster0.01gxb.mongodb.net/')
+    db = client['test']
     return db
 
 #get the correct time in pst
