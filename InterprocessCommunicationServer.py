@@ -3,6 +3,74 @@ from pymongo import MongoClient
 from datetime import datetime, timedelta
 import pytz
 
+#making the bst
+class TreeNode:
+    def __init__(self, data):
+        # Store metadata
+        self.data = data 
+        #left child
+        self.left = None
+        #right child          
+        self.right = None
+
+class BinarySearchTree:
+    def __init__(self):
+        #root
+        self.root = None
+
+    #nsert a new node into the binary tree
+    def insert(self, data, key="timestamp"):
+        if not self.root:
+            self.root = TreeNode(data)
+        else:
+            self._insert_recursive(self.root, data, key)
+
+    def _insert_recursive(self, node, data, key):
+        if data[key] < node.data[key]:
+            if node.left is None:
+                node.left = TreeNode(data)
+            else:
+                self._insert_recursive(node.left, data, key)
+        else:
+            if node.right is None:
+                node.right = TreeNode(data)
+            else:
+                self._insert_recursive(node.right, data, key)
+
+    #Search for a node with a specific key done recursively
+    def search(self, key_value, key="timestamp"):
+        return self._search_recursive(self.root, key_value, key)
+
+    def _search_recursive(self, node, key_value, key):
+        if node is None or node.data[key] == key_value:
+            return node
+        elif key_value < node.data[key]:
+            return self._search_recursive(node.left, key_value, key)
+        else:
+            return self._search_recursive(node.right, key_value, key)
+
+    #in-order traversal to retrieve sorted data
+    def inorder_traversal(self, node=None, results=None):
+        if results is None:
+            results = []
+        if node is None:
+            node = self.root
+        if node.left:
+            self.inorder_traversal(node.left, results)
+        results.append(node.data)
+        if node.right:
+            self.inorder_traversal(node.right, results)
+        return results
+
+
+def populate_tree_from_db(db):
+    tree = BinarySearchTree()
+    #fetch metadata from mongoDB
+    all_data = db.readings.find({})  
+    for doc in all_data:
+        tree.insert(doc)
+    return tree
+
 #valid queries
 VALID_QUERIES = [
     "What is the average moisture inside my kitchen fridge in the past three hours?",
@@ -33,19 +101,19 @@ def moisture_rh(moisture):
 #actually processing the metadata
 def process_query(db, query):
     if query == VALID_QUERIES[0]:
-        now = datetime.now(pytz.UTC)
-        three_hours = now - timedelta(hours=3)
-        fridge_data = db.readings.find({"device_type": "fridge", "timestamp": {"$gte": three_hours}})
+        #change this based on db
+        fridge_data = db.readings.find({})
         
         readings = list(fridge_data)
         if not readings:
             return "No data available for the past 3 hours."
 
         avg_moisture = sum([moisture_rh(doc["moisture"]) for doc in fridge_data]) / fridge_data.count()
-        return f"Average moisture in the past 3 hours: {avg_moisture:.2f}% RH (PST)"
+        return f"Average moisture : {avg_moisture:.2f}% RH (PST)"
 
     elif query == VALID_QUERIES[1]:
-        dishwasher_data = db.readings.find({"device_type": "dishwasher"})
+        #change this based on db
+        dishwasher_data = db.readings.find({})
 
         readings = list(dishwasher_data)
         if not readings:
@@ -55,10 +123,9 @@ def process_query(db, query):
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
+        #change this based on db
         device_data = db.readings.aggregate([
-            {"$group": {"_id": "$device_id", "total_electricity": {"$sum": "$electricity"}}},
-            {"$sort": {"total_electricity": -1}},
-            {"$limit": 1}
+            
         ])
 
         top_device = list(device_data)
@@ -103,8 +170,12 @@ def start_server():
                 if not myData:
                     break
                 print(f"recieved message: {myData}")
-                incomingSocket.send(bytearray(str(myData.upper()), encoding='utf-8'))
-
+                
+                if myData in VALID_QUERIES:
+                    response = process_query(db,myData)
+                else:
+                    response = "Invalid query"
+                incomingSocket.send(bytearray(response, encoding='utf-8'))
         except Exception as e:
             print(f"Error during connection handling: {e}")
 
