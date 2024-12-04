@@ -27,6 +27,9 @@ while True:
         print(f"Error: {e}. Please try again.")
 try:
     while True:
+        print("1.What is the average moisture inside my kitchen fridge in the past three hours?")
+        print("2.What is the average water consumption per cycle in my smart dishwasher?")
+        print("3.Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?")
         someData = input("Enter the message (type 'exit' to quit): ")
         if someData.lower() == "exit":
             # Allow user to exit

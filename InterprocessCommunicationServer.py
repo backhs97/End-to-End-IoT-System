@@ -101,9 +101,19 @@ def connect_mongo():
     db = client['test']
     return db
 
-#get correct moisture reading to rh
+#converts to RH assuming you have a linear mapping or readings
 def moisture_rh(moisture):
-    return(moisture/1024) *100
+    min_temp = 10 
+    max_temp = 30  
+    min_rh = 20     
+    max_rh = 80
+    if moisture < min_temp:
+        return min_rh
+    elif moisture > max_temp:
+        return max_rh
+    
+    rh = ((moisture - min_temp) / (max_temp - min_temp)) * (max_rh - min_rh) + min_rh
+    return(rh)
 
 #actually processing the metadata
 def process_query(tree, query):
@@ -139,7 +149,6 @@ def process_query(tree, query):
 
         #edit this
         avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) / len(dishwasher_data)
-        #avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data]) / len(dishwasher_data)
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
@@ -224,7 +233,7 @@ def start_server():
                 if myData in VALID_QUERIES:
                     response = process_query(tree,myData)
                 else:
-                    response = "Invalid query"
+                    response = "Invalid query please review the available queries"
                 incomingSocket.send(bytearray(response, encoding='utf-8'))
         except Exception as e:
             print(f"Error during connection handling: {e}")
