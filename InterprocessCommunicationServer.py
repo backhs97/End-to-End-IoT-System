@@ -78,22 +78,12 @@ def populate_tree_from_db(db):
     return tree
 
 
-
-
-
 #connection to mongo
 def connect_mongo():
     #fill in with my mongo database
     client = MongoClient('mongodb+srv://choharry888:j741z2FEdn05nnCA@cluster0.01gxb.mongodb.net/')
     db = client['test']
     return db
-
-#get the correct time in pst
-def time_pst(timestamp):
-    utc_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-    utc_time = pytz.utc.localize(utc_time)
-    pst_time = utc_time.astimezone(pytz.timezone("US/Pacific"))
-    return pst_time.strftime("%Y-%m-%d %I:%M:%S %p")
 
 #get correct moisture reading to rh
 def moisture_rh(moisture):
@@ -172,39 +162,6 @@ def process_query(tree, query):
             return f"Device {top_device} has the highest average consumption: {highest_average:.2f} kWh"
         else:
             return "No valid data available for any device."
-
-'''
-        device_totals = {device: 0 for device in ammeter_fields}
-        device_counts = {device: 0 for device in ammeter_fields}
-
-        for doc in tree.inorder_traversal():
-            for device, field in ammeter_fields.items():
-                if field in doc:
-                    device_totals[device] += float(doc[field])
-                    device_counts[device] += 1
-
-        device_averages = {}
-        for device, total in device_totals.items():
-            if device_counts[device] > 0:
-                device_averages[device] = total / device_counts[device]
-            else:
-                device_averages[device] = None
-
-        
-
-        result_line = []
-        for device, average in device_averages.items():
-            if average is not None:
-                result_line.append(f"{device}: {average:.2f} kWh (average)")
-            else:
-                result_line.append(f"{device}: No data available")
-
-        #edit this
-        return f"Device {device} consumed the most electricity: {average:.2f} kWh"
-    
-    return "Invalid query."
-'''
-
 
 #from previous assignment
 def start_server():
