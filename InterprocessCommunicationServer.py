@@ -3,23 +3,27 @@ from pymongo import MongoClient
 from datetime import datetime, timedelta
 import pytz
 
+#valid queries
+VALID_QUERIES = [
+    "What is the average moisture inside my kitchen fridge in the past three hours?",
+    "What is the average water consumption per cycle in my smart dishwasher?",
+    "Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?"
+]
+
 #making the bst
 class TreeNode:
     def __init__(self, data):
         # Store metadata
         self.data = data 
-        #left child
-        self.left = None
-        #right child          
+        self.left = None       
         self.right = None
 
 class BinarySearchTree:
     def __init__(self):
-        #root
         self.root = None
 
-    #nsert a new node into the binary tree
-    def insert(self, data, key="timestamp"):
+    #nsert a new node into the binary tree done recursively
+    def insert(self, data, key="payload.timestamp"):
         if not self.root:
             self.root = TreeNode(data)
         else:
@@ -38,7 +42,7 @@ class BinarySearchTree:
                 self._insert_recursive(node.right, data, key)
 
     #Search for a node with a specific key done recursively
-    def search(self, key_value, key="timestamp"):
+    def search(self, key_value, key="payload.timestamp"):
         return self._search_recursive(self.root, key_value, key)
 
     def _search_recursive(self, node, key_value, key):
@@ -65,18 +69,15 @@ class BinarySearchTree:
 
 def populate_tree_from_db(db):
     tree = BinarySearchTree()
+    three_days = datetime.now(pytz.utc) - timedelta(days=3)
     #fetch metadata from mongoDB
-    all_data = db.readings.find({})  
+    all_data = db.readings.find({"payload.timestamp": {"$gte": three_days}})  
     for doc in all_data:
-        tree.insert(doc)
+        doc["payload"]["timestamp"] = datetime.fromtimestamp(float(doc["payload"]["timestamp"]), pytz.utc)
+        tree.insert(doc["payload"], key="timestamp")
     return tree
 
-#valid queries
-VALID_QUERIES = [
-    "What is the average moisture inside my kitchen fridge in the past three hours?",
-    "What is the average water consumption per cycle in my smart dishwasher?",
-    "Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?"
-]
+
 
 
 
@@ -99,42 +100,57 @@ def moisture_rh(moisture):
     return(moisture/1024) *100
 
 #actually processing the metadata
-def process_query(db, query):
+def process_query(tree, query):
     if query == VALID_QUERIES[0]:
-        #change this based on db
-        fridge_data = db.readings.find({})
-        
-        readings = list(fridge_data)
-        if not readings:
-            return "No data available for the past 3 hours."
+        three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
 
-        avg_moisture = sum([moisture_rh(doc["moisture"]) for doc in fridge_data]) / fridge_data.count()
-        return f"Average moisture : {avg_moisture:.2f}% RH (PST)"
+        #possibly edit this
+        results = [
+            node for node in tree.inorder_traversal()
+            if node["timestamp"] >= three_hours
+        ]
+        
+        if not results:
+            return "No data available for the past 3 hours."
+        #edit this
+        avg_moisture = sum([moisture_rh(doc["Moisture Meter - moist"]) for doc in results]) / len(results)
+        return f"Average moisture : {avg_moisture:.2f}% RH"
 
     elif query == VALID_QUERIES[1]:
         #change this based on db
-        dishwasher_data = db.readings.find({})
+        dishwasher_data = [
+            node for node in tree.inorder_traversal()
+            #i misnamed teh dishwasher as refrigerator
+            if "new smart refrigerator" in node["board_name"].lower()
+        ]
 
-        readings = list(dishwasher_data)
-        if not readings:
-            return "No data available for the dishwasher."    
+        if not dishwasher_data:
+            return "No data available for the dishwasher."
 
-        avg_water = sum([doc["water_usage"] for doc in dishwasher_data]) / dishwasher_data.count()
+        #edit this
+        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data]) / len(dishwasher_data)
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
         #change this based on db
-        device_data = db.readings.aggregate([
-            
-        ])
+        #sensor 3 08e06c94-246e-49f0-80fa-166efa1a8e8b
+        #ammeter
+        #dish ammeter
+        device_consumption = {}
+        for doc in tree.inorder_traversal():
+            device_name = doc["board_name"]
+            ammeter_reading = float(doc.get("dish ammeter", 0))
+            if device_name not in device_consumption:
+                device_consumption[device_name] = 0
+            device_consumption[device_name] += ammeter_reading
 
-        top_device = list(device_data)
-        if not top_device:
+        if not device_consumption:
             return "No electricity data available."
 
-        device = top_device[0]
-        return f"Device {device['_id']} consumed the most electricity: {device['total_electricity']:.2f} kWh"
-
+        #edit this
+        top_device = max(device_consumption, key=device_consumption.get)
+        return f"Device {top_device} consumed the most electricity: {device_consumption[top_device]:.2f} kWh"
+    
     return "Invalid query."
 
 
@@ -142,6 +158,7 @@ def process_query(db, query):
 def start_server():
     print("server control")
     db = connect_mongo()
+    tree = populate_tree_from_db(db)
     myTCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     while True:
         # Keep trying until a successful connection
@@ -172,7 +189,7 @@ def start_server():
                 print(f"recieved message: {myData}")
                 
                 if myData in VALID_QUERIES:
-                    response = process_query(db,myData)
+                    response = process_query(tree,myData)
                 else:
                     response = "Invalid query"
                 incomingSocket.send(bytearray(response, encoding='utf-8'))
