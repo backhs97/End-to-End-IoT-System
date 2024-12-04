@@ -136,22 +136,74 @@ def process_query(tree, query):
         #sensor 3 08e06c94-246e-49f0-80fa-166efa1a8e8b
         #ammeter
         #dish ammeter
-        device_consumption = {}
-        for doc in tree.inorder_traversal():
-            device_name = doc["board_name"]
-            ammeter_reading = float(doc.get("dish ammeter", 0))
-            if device_name not in device_consumption:
-                device_consumption[device_name] = 0
-            device_consumption[device_name] += ammeter_reading
 
-        if not device_consumption:
-            return "No electricity data available."
+        ammeter_fields = {
+            "Dishwasher": "dish ammeter",
+            "Refrigerator": "ammeter",
+            "Virtual Fridge": "sensor 3 08e06c94-246e-49f0-80fa-166efa1a8e8b"
+        }
+
+        totals = {}
+        counts = {}
+        for device in ammeter_fields.keys():
+            totals[device] = 0
+            counts[device] = 0
+        
+        for doc in tree.inorder_traversal():
+            for device, field in ammeter_fields.items():
+                if field in doc:
+                    totals[device] += float(doc[field])
+                    counts[device] += 1
+
+        averages = {
+            device: (totals[device] / counts[device]) if counts[device] > 0 else None
+            for device in ammeter_fields.keys()
+        }
+
+        top_device = None
+        highest_average = 0
+
+        for device, average in averages.items():
+            if average is not None and average > highest_average:
+                top_device = device
+                highest_average = average
+        
+        if top_device is not None:
+            return f"Device {top_device} has the highest average consumption: {highest_average:.2f} kWh"
+        else:
+            return "No valid data available for any device."
+
+'''
+        device_totals = {device: 0 for device in ammeter_fields}
+        device_counts = {device: 0 for device in ammeter_fields}
+
+        for doc in tree.inorder_traversal():
+            for device, field in ammeter_fields.items():
+                if field in doc:
+                    device_totals[device] += float(doc[field])
+                    device_counts[device] += 1
+
+        device_averages = {}
+        for device, total in device_totals.items():
+            if device_counts[device] > 0:
+                device_averages[device] = total / device_counts[device]
+            else:
+                device_averages[device] = None
+
+        
+
+        result_line = []
+        for device, average in device_averages.items():
+            if average is not None:
+                result_line.append(f"{device}: {average:.2f} kWh (average)")
+            else:
+                result_line.append(f"{device}: No data available")
 
         #edit this
-        top_device = max(device_consumption, key=device_consumption.get)
-        return f"Device {top_device} consumed the most electricity: {device_consumption[top_device]:.2f} kWh"
+        return f"Device {device} consumed the most electricity: {average:.2f} kWh"
     
     return "Invalid query."
+'''
 
 
 #from previous assignment
