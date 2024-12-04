@@ -30,7 +30,7 @@ class BinarySearchTree:
             self._insert_recursive(self.root, data, key)
 
     def _insert_recursive(self, node, data, key):
-        if data[key] < node.data[key]:
+        if data.get(key) < node.data.get(key):
             if node.left is None:
                 node.left = TreeNode(data)
             else:
@@ -55,6 +55,8 @@ class BinarySearchTree:
 
     #in-order traversal to retrieve sorted data
     def inorder_traversal(self, node=None, results=None):
+        if self.root is None:
+            return []
         if results is None:
             results = []
         if node is None:
@@ -69,12 +71,26 @@ class BinarySearchTree:
 
 def populate_tree_from_db(db):
     tree = BinarySearchTree()
-    three_days = datetime.now(pytz.utc) - timedelta(days=3)
+    three_hours = datetime.now(pytz.utc) - timedelta(hours=3)
+    print("Three days ago:", three_hours)
+    three_hours_timestamp = int(three_hours.timestamp() / 1000)
+    print("Three days ago:", three_hours_timestamp)
     #fetch metadata from mongoDB
-    all_data = db.readings.find({"payload.timestamp": {"$gte": three_days}})  
+
+    total_docs = db.Table_virtual.count_documents({})
+    print("Total documents in the collection:", total_docs)
+    count = db.Table_virtual.count_documents({"payload.timestamp": {"$gte": str(three_hours_timestamp)}})
+    all_data = db.Table_virtual.find({"payload.timestamp": {"$gte": str(three_hours_timestamp)}})
+    print("Total documents in the collection:", count)
     for doc in all_data:
-        doc["payload"]["timestamp"] = datetime.fromtimestamp(float(doc["payload"]["timestamp"]), pytz.utc)
-        tree.insert(doc["payload"], key="timestamp")
+        try:
+            # Ensure timestamp is correctly converted
+            timestamp = int(doc["payload"]["timestamp"])
+            doc["payload"]["timestamp"] = datetime.fromtimestamp(timestamp, pytz.utc)
+            tree.insert(doc["payload"], key="timestamp")
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"Skipping document due to error: {e}")
+
     return tree
 
 
@@ -92,21 +108,25 @@ def moisture_rh(moisture):
 #actually processing the metadata
 def process_query(tree, query):
     if query == VALID_QUERIES[0]:
-        three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
+        print("Query 0")
+        #three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
+        #three_hours_timestamp = (three_hours.timestamp() / 1000)
 
         #possibly edit this
         results = [
             node for node in tree.inorder_traversal()
-            if node["timestamp"] >= three_hours
+            #if "timestamp" in node and node["timestamp"].isdigit() and int(node["timestamp"]) >= three_hours_timestamp
+            #if int(node["timestamp"]) >= three_hours_timestamp
         ]
         
         if not results:
             return "No data available for the past 3 hours."
-        #edit this
-        avg_moisture = sum([moisture_rh(doc["Moisture Meter - moist"]) for doc in results]) / len(results)
+        
+        avg_moisture = sum([float(doc["Moisture Meter - moist"]) for doc in results if "Moisture Meter - moist" in doc]) / len(results)        
         return f"Average moisture : {avg_moisture:.2f}% RH"
 
     elif query == VALID_QUERIES[1]:
+        print("Query 1")
         #change this based on db
         dishwasher_data = [
             node for node in tree.inorder_traversal()
@@ -118,10 +138,12 @@ def process_query(tree, query):
             return "No data available for the dishwasher."
 
         #edit this
-        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data]) / len(dishwasher_data)
+        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) / len(dishwasher_data)
+        #avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data]) / len(dishwasher_data)
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
+        print("Query 2")
         #change this based on db
         #sensor 3 08e06c94-246e-49f0-80fa-166efa1a8e8b
         #ammeter
@@ -172,13 +194,15 @@ def start_server():
     while True:
         # Keep trying until a successful connection
         try:
-            serverIP = input("Enter the server IP address: ")
-            serverPort = int(input("Enter the server port number: "))
+            #serverIP = input("Enter the server IP address: ")
+            #serverPort = int(input("Enter the server port number: "))
 
             #uses the server
-            myTCPSocket.bind((serverIP , serverPort))
+            #myTCPSocket.bind((serverIP , serverPort))
+            myTCPSocket.bind(( "0.0.0.0" , 8080))
             myTCPSocket.listen(5)
-            print(f"Server is listening on port {serverPort}")
+            #print(f"Server is listening on port {serverPort}")
+            print(f"Server is listening on port 8080")
             break
         except (socket.gaierror, ConnectionRefusedError):
             print("Error: check ip or port addresses")
