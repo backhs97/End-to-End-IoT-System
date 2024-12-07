@@ -102,7 +102,7 @@ def populate_tree_from_db(db):
 #connection to mongo
 def connect_mongo():
     #fill in with my mongo database
-    client = MongoClient('mongodb+srv://choharry888:j741z2FEdn05nnCA@cluster0.01gxb.mongodb.net/')
+    client = MongoClient('URL')
     db = client['test']
     return db
 
