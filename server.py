@@ -23,7 +23,7 @@ class BinarySearchTree:
     def __init__(self):
         self.root = None
 
-    #insert a new node into the binary tree done recursively
+    #nsert a new node into the binary tree done recursively
     def insert(self, data, key="payload.timestamp"):
         if not self.root:
             self.root = TreeNode(data)
@@ -72,21 +72,8 @@ class BinarySearchTree:
 
 def populate_tree_from_db(db):
     tree = BinarySearchTree()
-    three_hours_ago = datetime.now(pytz.utc) - timedelta(hours=3)
-    print("Three hours ago:", three_hours_ago)
-    three_hours_timestamp = int(three_hours_ago.timestamp() / 1000)
-    print("Three hours ago:", three_hours_timestamp)
     #fetch metadata from mongoDB
-    
-    total_docs = db.Table_virtual.count_documents({})
-    print("Total documents in the collection:", total_docs)
-    count = db.Table_virtual.count_documents({
-        "payload.timestamp": {"$gte": three_hours_timestamp}
-    })
-    all_data = db.Table_virtual.find({
-        "payload.timestamp": {"$gte": three_hours_timestamp}
-    })
-    print("Total documents in the collection:", count)
+    all_data = db.Table_virtual.find().sort("payload.timestamp", -1).limit(500)
     for doc in all_data:
         try:
             # Ensure timestamp is correctly converted
@@ -102,7 +89,7 @@ def populate_tree_from_db(db):
 #connection to mongo
 def connect_mongo():
     #fill in with my mongo database
-    client = MongoClient('URL')
+    client = MongoClient('mongodb+srv://choharry888:j741z2FEdn05nnCA@cluster0.01gxb.mongodb.net/')
     db = client['test']
     return db
 
@@ -117,27 +104,26 @@ def moisture_rh(moisture):
     elif moisture > max_temp:
         return max_rh
     
-    rh = ((moisture - min_temp) / (max_temp - min_temp)) * (max_rh - min_rh) + min_rh
+    rh = ((moisture - min_temp) / (max_temp - min_temp)) * 10* (max_rh - min_rh) + min_rh
     return(rh)
 
 #actually processing the metadata
 def process_query(tree, query):
     if query == VALID_QUERIES[0]:
         print("Query 0")
-        #three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
-        #three_hours_timestamp = (three_hours.timestamp() / 1000)
+        three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
+        three_hours_timestamp = (three_hours.timestamp() / 1000)
 
         #possibly edit this
         results = [
-            node for node in tree.inorder_traversal()
-            #if "timestamp" in node and node["timestamp"].isdigit() and int(node["timestamp"]) >= three_hours_timestamp
-            #if int(node["timestamp"]) >= three_hours_timestamp
-        ]
-        
+            doc for doc in tree.inorder_traversal()
+            if doc["timestamp"] >= three_hours
+        ]        
+
         if not results:
             return "No data available for the past 3 hours."
-        
-        avg_moisture = sum([float(doc["Moisture Meter - moist"]) for doc in results if "Moisture Meter - moist" in doc]) / len(results)        
+
+        avg_moisture = (sum([float(doc["Moisture Meter - moist"]) for doc in results if "Moisture Meter - moist" in doc])*10) / len(results)        
         return f"Average moisture : {avg_moisture:.2f}% RH"
 
     elif query == VALID_QUERIES[1]:
@@ -150,10 +136,11 @@ def process_query(tree, query):
         ]
 
         if not dishwasher_data:
+
             return "No data available for the dishwasher."
 
         #edit this
-        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) / len(dishwasher_data)
+        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) /(6*len(dishwasher_data)) 
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
