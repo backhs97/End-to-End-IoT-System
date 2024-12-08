@@ -2,6 +2,7 @@ import socket
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 import pytz
+import sys
 
 #valid queries
 VALID_QUERIES = [
@@ -71,17 +72,8 @@ class BinarySearchTree:
 
 def populate_tree_from_db(db):
     tree = BinarySearchTree()
-    three_hours = datetime.now(pytz.utc) - timedelta(hours=3)
-    print("Three days ago:", three_hours)
-    three_hours_timestamp = int(three_hours.timestamp() / 1000)
-    print("Three days ago:", three_hours_timestamp)
     #fetch metadata from mongoDB
-
-    total_docs = db.Table_virtual.count_documents({})
-    print("Total documents in the collection:", total_docs)
-    count = db.Table_virtual.count_documents({"payload.timestamp": {"$gte": str(three_hours_timestamp)}})
-    all_data = db.Table_virtual.find({"payload.timestamp": {"$gte": str(three_hours_timestamp)}})
-    print("Total documents in the collection:", count)
+    all_data = db.Table_virtual.find().sort("payload.timestamp", -1).limit(500)
     for doc in all_data:
         try:
             # Ensure timestamp is correctly converted
@@ -112,27 +104,29 @@ def moisture_rh(moisture):
     elif moisture > max_temp:
         return max_rh
     
-    rh = ((moisture - min_temp) / (max_temp - min_temp)) * (max_rh - min_rh) + min_rh
+    rh = ((moisture - min_temp) / (max_temp - min_temp)) * 10* (max_rh - min_rh) + min_rh
     return(rh)
 
 #actually processing the metadata
 def process_query(tree, query):
     if query == VALID_QUERIES[0]:
         print("Query 0")
-        #three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
-        #three_hours_timestamp = (three_hours.timestamp() / 1000)
+        three_hours = datetime.now(pytz.utc)  - timedelta(hours=3)
+        three_hours_timestamp = (three_hours.timestamp() / 1000)
 
         #possibly edit this
         results = [
-            node for node in tree.inorder_traversal()
-            #if "timestamp" in node and node["timestamp"].isdigit() and int(node["timestamp"]) >= three_hours_timestamp
-            #if int(node["timestamp"]) >= three_hours_timestamp
-        ]
-        
+            doc for doc in tree.inorder_traversal()
+            #if "timestamp" in doc and isinstance(doc["timestamp"], float) and doc["timestamp"] >= three_hours_timestamp
+            if doc["timestamp"] >= three_hours
+            #if isinstance(doc["timestamp"], float) and doc["timestamp"] >= three_hours_timestamp
+
+        ]        
+
         if not results:
             return "No data available for the past 3 hours."
-        
-        avg_moisture = sum([float(doc["Moisture Meter - moist"]) for doc in results if "Moisture Meter - moist" in doc]) / len(results)        
+
+        avg_moisture = (sum([float(doc["Moisture Meter - moist"]) for doc in results if "Moisture Meter - moist" in doc])*10) / len(results)        
         return f"Average moisture : {avg_moisture:.2f}% RH"
 
     elif query == VALID_QUERIES[1]:
@@ -145,10 +139,11 @@ def process_query(tree, query):
         ]
 
         if not dishwasher_data:
+
             return "No data available for the dishwasher."
 
         #edit this
-        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) / len(dishwasher_data)
+        avg_water = sum([float(doc["watercon"]) for doc in dishwasher_data if "watercon" in doc]) /(6*len(dishwasher_data)) 
         return f"Average water consumption per cycle: {avg_water:.2f} gallons"
     
     elif query == VALID_QUERIES[2]:
@@ -196,27 +191,33 @@ def process_query(tree, query):
 
 #from previous assignment
 def start_server():
-    print("server control")
+    print("=== IoT Query Server ===")
     db = connect_mongo()
     tree = populate_tree_from_db(db)
     myTCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
     while True:
         # Keep trying until a successful connection
         try:
-            #serverIP = input("Enter the server IP address: ")
-            #serverPort = int(input("Enter the server port number: "))
-
-            #uses the server
-            #myTCPSocket.bind((serverIP , serverPort))
-            myTCPSocket.bind(( "0.0.0.0" , 8080))
+            server_ip = input("Enter the server IP address: ")
+            server_port = int(input("Enter the server port number: "))
+            
+            myTCPSocket.bind((server_ip, server_port))
             myTCPSocket.listen(5)
-            #print(f"Server is listening on port {serverPort}")
-            print(f"Server is listening on port 8080")
+            print(f"\nServer is listening on {server_ip}:{server_port}")
             break
-        except (socket.gaierror, ConnectionRefusedError):
-            print("Error: check ip or port addresses")
+        except ValueError:
+            print("Error: Port must be a number. Please try again.")
+        except socket.gaierror:
+            print("Error: Invalid IP address. Please try again.")
+        except OSError as e:
+            print(f"Error: {e}. The address might be in use or you may not have permission.")
         except Exception as e:
             print(f"Error: {e}")
+        
+        retry = input("\nWould you like to try again? (y/n): ")
+        if retry.lower() != 'y':
+            sys.exit(1)
 
     while True:
         #gets message and confirms
@@ -242,6 +243,14 @@ def start_server():
             #ends connection
             incomingSocket.close()
             print("connection closed")
+            
+            #continues server
+            continue_server = input("\nDo you want to continue running the server? (y/n): ")
+            if continue_server.lower() != 'y':
+                print("Shutting down server...")
+                myTCPSocket.close()
+                sys.exit(0)
+            print("\nWaiting for new connection...")
 
 if __name__ == "__main__":
     start_server()
